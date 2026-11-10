@@ -85,7 +85,10 @@ def main():
     sectors = pool["sectors"]
 
     all_codes = [s["code"] for d in sectors.values() for s in d["stocks"]]
-    quotes = fetch_quotes(sorted(set(all_codes)))
+    # 持仓股可能不在选股池里，也要取行情
+    holdings_env = os.environ.get("HOLDINGS", "").strip()
+    holdings_extra = [c.strip() for c in holdings_env.replace("，", ",").split(",") if c.strip()]
+    quotes = fetch_quotes(sorted(set(all_codes) | set(holdings_extra)))
     print(f"# quotes fetched: {len(quotes)}/{len(set(all_codes))}", file=sys.stderr)
 
     rows = []
@@ -118,15 +121,46 @@ def main():
 
     selected = rows[:TOP_SECTORS] if TOP_SECTORS > 0 else rows
 
-    print("\n=== 今日选股 ===", file=sys.stderr)
+    # ---- 持仓优先：HOLDINGS=600519,300750 ----
+    holdings_raw = os.environ.get("HOLDINGS", "").strip()
+    holdings = [c.strip() for c in holdings_raw.replace("，", ",").split(",") if c.strip()]
+
     codes = []
+    print("\n=== 你的持仓（优先分析）===", file=sys.stderr)
+    if holdings:
+        for c in holdings:
+            if c not in codes:
+                codes.append(c)
+            q = quotes.get(c)
+            if q:
+                print(f"  [持仓] {q['name']}({c}) 涨{q['pct']:+.2f}% "
+                      f"现价{q['price']:.2f}", file=sys.stderr)
+            else:
+                print(f"  [持仓] {c} （今日无行情，仍纳入分析）", file=sys.stderr)
+    else:
+        print("  （未配置 HOLDINGS，仅按板块选股）", file=sys.stderr)
+
+    # ---- 板块补足到 TOTAL_TARGET ----
+    target = int(os.environ.get("TOTAL_TARGET", "0") or 0)
+    need = max(0, target - len(codes)) if target > 0 else 10 ** 6
+
+    print("\n=== 板块选股 ===", file=sys.stderr)
+    added = 0
     for r in selected:
         for p in r["picks"]:
+            if added >= need:
+                break
+            if p["code"] in codes:
+                continue
             codes.append(p["code"])
+            added += 1
             print(f"  [{r['sector']}] {p['name']}({p['code']}) "
                   f"涨{p['pct']:+.2f}% 换手{p['turnover']:.2f}% 额{p.get('amount_wan',0)/10000:.1f}亿",
                   file=sys.stderr)
+        if added >= need:
+            break
 
+    print(f"\n# 合计 {len(codes)} 只（持仓 {len(holdings)} + 板块新增 {added}）", file=sys.stderr)
     print(",".join(codes))
 
 
