@@ -461,6 +461,24 @@ jobs:
             export STOCK_LIST="600519"
           fi
 
+          # ==========================================
+          # 板块选股模式（SECTOR_PICK_ENABLED=true 时启用）
+          # 每天从用户常看的 12 个板块中挑出最强标的，动态覆盖 STOCK_LIST
+          # ==========================================
+          if [ "${SECTOR_PICK_ENABLED,,}" = "true" ]; then
+            echo "🔍 板块选股模式已启用"
+            export SECTOR_POOL_FILE="data/sector_pool_pruned.json"
+            PICKS=$(python scripts/sector_pick.py 2>&1 >/tmp/picks.txt | sed 's/^/    /' || true)
+            echo "$PICKS"
+            PICKS=$(tail -n1 /tmp/picks.txt 2>/dev/null || true)
+            if [ -n "$PICKS" ]; then
+              export STOCK_LIST="$PICKS"
+              echo "✅ 今日板块选股: $STOCK_LIST"
+            else
+              echo "⚠️ 板块选股失败，使用 STOCK_LIST 默认值"
+            fi
+          fi
+
           # 处理 LITELLM YAML 配置文件
           if [ -n "$LITELLM_CONFIG_YAML" ] && [ -n "$LITELLM_CONFIG" ]; then
             echo "📝 使用 GitHub Actions Secrets/Variables 中的 LITELLM_CONFIG_YAML 配置"
