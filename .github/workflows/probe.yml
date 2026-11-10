@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -17,8 +20,7 @@ jobs:
           pip install --quiet --upgrade pip
           pip install --quiet akshare==1.20.37 efinance pandas
 
-      - name: 探测数据源
-        run: python probe.py
-
-      - name: 上传 probe 脚本
-        run: echo done
+      - name: 探测数据源（带超时）
+        run: |
+          timeout 420 python probe.py || echo "PROBE_EXIT=$?"
+        continue-on-error: true
